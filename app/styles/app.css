@@ -1,0 +1,18 @@
+section.heading-bg {
+  padding: 40px 0;
+  background: #30354c;
+  color: #fff;
+}
+section.content {
+  background: #cacaca;
+  padding: 40px 0;
+}
+#map_canvas {
+  height: 400px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+#map_canvas .gm-style-iw p {
+  margin-bottom: 3px;
+}
