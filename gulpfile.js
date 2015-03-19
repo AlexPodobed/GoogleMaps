@@ -79,7 +79,7 @@ gulp.task('clean', require('del').bind(null, ['.tmp', 'dist']));
 gulp.task('serve', ['less','styles', 'fonts'], function () {
   browserSync({
     notify: false,
-    port: 9000,
+    port: 8888,
     server: {
       baseDir: ['.tmp', 'app'],
       routes: {

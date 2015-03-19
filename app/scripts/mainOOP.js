@@ -1,4 +1,8 @@
 ;(function () {
+
+  /*
+  *    MAP Constructor
+  * */
   function Map(cfg) {
     this.config = {
       zoom: cfg.zoom || 10,
@@ -36,7 +40,6 @@
   };
   Map.prototype.attachEvents = function () {
     this.$$on(this.map, this.events.changeCenter);
-
     this.$$on(this.map, 'click', this.events.createByClick.bind(this));
   };
   Map.prototype.events = {
@@ -108,6 +111,7 @@
     this.$$on(this.markerInstance, 'click', this.events.centerMap.bind(this));
     this.$$on(this.markerInstance, 'mouseover', this.events.openWindow.bind(this));
     this.$$on(this.markerInstance, 'mouseout', this.events.closeWindow.bind(this));
+    this.$$on(this.markerInstance, 'dblclick', this.events.removeMarker.bind(this));
   };
   Marker.prototype.events = {
     openWindow: function () {
@@ -121,6 +125,10 @@
     },
     centerMap: function(){
       this.map.setCenter(this.config.position);
+    },
+    removeMarker: function () {
+      console.log('remove', this)
+      this.markerInstance.setMap(null);
     }
   };
   Marker.prototype.init = function () {
@@ -129,6 +137,9 @@
     this.events.openWindow.call(this);
   };
 
+  /*
+  *     FORECAST API FACADE
+  * */
   var forecastAPI = (function () {
     var API_URL = "http://api.openweathermap.org/data/2.5/weather?"; //lat=50.08605&lon=19.98041699999
 
@@ -141,9 +152,12 @@
     }
   })();
 
+  /*    USAGE */
   $(function () {
-    var map = new Map({zoom: 2, el: "#map_canvas"});
+    var map = new Map({zoom: 4, el: "#map_canvas"});
     map.init();
+    //for debugging
+    window.map = map;
   });
 
 })();
