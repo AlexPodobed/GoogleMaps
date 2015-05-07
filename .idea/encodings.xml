@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="Encoding">
+  <component name="Encoding" useUTFGuessing="true" native2AsciiForPropertiesFiles="false">
+    <file url="file://$PROJECT_DIR$/app/parser.html" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/app/scripts/main.js" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/app/scripts/mainOOP.js" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/app/scripts/parser.js" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/app/styles/app.less" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/app/styles/main.css" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/app/styles/parser.less" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/gulpfile.js" charset="UTF-8" />
   </component>
 </project>

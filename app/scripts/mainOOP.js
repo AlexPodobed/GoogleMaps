@@ -11,7 +11,9 @@
     this.el = document.querySelector(cfg.el);
     this.map = undefined;
     this.$$on = google.maps.event.addListener;
+    this.$$one = google.maps.event.addListenerOnce;
     this.markers = [];
+    this.overlay = null;
   }
   Map.prototype.getCurrentPosition = function () {
     var d = $.Deferred();
@@ -39,15 +41,43 @@
     this.markers.push(marker);
   };
   Map.prototype.attachEvents = function () {
-    this.$$on(this.map, this.events.changeCenter);
+    this.$$on(this.map, 'center_changed', this.events.changeCenter.apply(this));
     this.$$on(this.map, 'click', this.events.createByClick.bind(this));
+    this.$$one(this.map, 'idle', this.events.mapLoaded.bind(this));
   };
   Map.prototype.events = {
     createByClick: function (location) {
+      console.log(location)
       this.createMarker(location.latLng)
     },
     changeCenter: function () {
-      console.log('Changed center');
+      var self = this;
+      return _.debounce(function(e) {
+
+        if(self.overlay){
+          console.log('remove')
+          self.overlay.setMap(null);
+          self.overlay = null;
+
+          console.log(self)
+
+          var bounds = self.map.getBounds()
+          var zoom = self.map.getZoom()
+          console.log("loaded", zoom, bounds.Ba);
+          //
+          self.overlay = new Overlay(bounds,self.map);
+          self.overlay.addLayer();
+        }
+      }, 500)
+    },
+    mapLoaded: function () {
+      var bounds = this.map.getBounds();
+      var zoom = this.map.getZoom();
+      console.log("loaded", zoom, bounds.Ba);
+      //
+      this.overlay = new Overlay(bounds,this.map);
+      this.overlay.addLayer();
+
     }
   };
   Map.prototype.init = function (cb) {
@@ -55,7 +85,7 @@
       .done(function (coords) {
         this.createMap(coords);
         this.attachEvents();
-        this.createMarker(this.map.getCenter())
+        this.createMarker(this.map.getCenter());
         if(typeof cb === 'function') cb();
       }.bind(this));
   };
@@ -133,8 +163,133 @@
   };
   Marker.prototype.init = function () {
     this.createInstance();
-    this.attachEvents();
-    this.events.openWindow.call(this);
+    //this.attachEvents();
+    //this.events.openWindow.call(this);
+  };
+
+
+  /*
+  *   OVERLAY Constructor
+  * */
+
+  function Overlay(bounds, map){
+    this.bounds = bounds;
+    this.map = map;
+    this.image = null;
+    this.div = null;
+
+    //this.setMap(map);
+  }
+
+  Overlay.prototype = new google.maps.OverlayView();
+
+  Overlay.prototype.onAdd = function () {
+    console.log('onAdd')
+    var div = document.createElement('div');
+    div.style.borderStyle = "none";
+    div.id = "ovlay"
+    div.style.borderStyle = "0px";
+    div.style.position = "absolute";
+
+    var img = document.createElement('img');
+    img.src = this.image;
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.opacity = 0.5;
+
+    img.style.position = "absolute";
+    div.appendChild(img);
+
+    this.div = div;
+
+    var panes = this.getPanes();
+    panes.overlayLayer.appendChild(div);
+  };
+
+  Overlay.prototype.draw = function () {
+    console.log('draw')
+
+    var overlayProjection = this.getProjection();
+    var sw = overlayProjection.fromLatLngToDivPixel(this.bounds.getSouthWest());
+    var ne = overlayProjection.fromLatLngToDivPixel(this.bounds.getNorthEast());
+
+    var div = this.div;
+    div.style.left = sw.x + "px";
+    div.style.top = ne.y + "px";
+    div.style.width = ( ne.x - sw.x ) + "px";
+    div.style.height = ( sw.y - ne.y ) + "px";
+  };
+
+  Overlay.prototype.onRemove = function () {
+    console.log('removed')
+    if(this.div){
+      this.div.parentNode.removeChild(this.div);
+      this.div = null;
+    }
+  };
+
+  Overlay.prototype.createRequestParams = function(bbox, zoom, dim) {
+    var params = "";
+    params += "&REQUEST=GetMap";
+    params += "&SERVICE=WMS";
+    params += "&VERSION=1.1.1";
+    params += "&STYLES=default";
+    params += "&FORMAT=image/png";
+    params += "&BGCOLOR=0xffffff";
+    params += "&TRANSPARENT=TRUE";
+    params += "&SRS=EPSG:54004";
+    params += "&BBOX=" + bbox;
+    params += "&WIDTH=" + dim.width;
+    params += "&HEIGHT=" + dim.height;
+    params += "&gzoom=" + (zoom);
+    return params;
+  };
+  Overlay.prototype.exdd2MercMetersLat = function(latitude) {
+    //Google Maps V3 is in EPSG:3857, but we use EPSG:4326 maps
+    var WGS84_SEMI_MAJOR_AXIS = 6378137.0;
+    var WGS84_ECCENTRICITY = 0.0818191913108718138;
+
+    if (latitude == -90)
+      latitude = -89.999;
+    var rads = latitude * Math.PI / 180.0;
+
+    var returner = WGS84_SEMI_MAJOR_AXIS * Math.log(Math.tan((rads + Math.PI / 2) / 2) * Math.pow(((1 - WGS84_ECCENTRICITY * Math.sin(rads)) / (1 + WGS84_ECCENTRICITY * Math.sin(rads))), WGS84_ECCENTRICITY / 2));
+    return returner;
+  };
+  Overlay.prototype.exdd2MercMetersLng = function(longitude) {
+    var WGS84_SEMI_MAJOR_AXIS = 6378137.0;
+    return WGS84_SEMI_MAJOR_AXIS * (longitude * Math.PI / 180.0);
+  };
+  Overlay.prototype.getBoundingBox = function() {
+
+    var mapSW = this.bounds.getSouthWest();
+    var mapNE = this.bounds.getNorthEast();
+    var north = mapNE.lat();
+    var south = mapSW.lat();
+    var east = mapNE.lng();
+    var west = mapSW.lng();
+
+
+    //for 54004 projection
+    return Math.round(this.exdd2MercMetersLng(west)) + "," + Math.round(this.exdd2MercMetersLat(south)) + "," + Math.round(this.exdd2MercMetersLng(east)) + "," + Math.round(this.exdd2MercMetersLat(north));
+
+  };
+  Overlay.prototype.getDim = function(el) {
+    return {
+      "height": jQuery(el).height(),
+      "width": jQuery(el).width()
+    }
+  };
+
+  Overlay.prototype.addLayer = function () {
+    var url = "http://mapserver.routeguard.eu/release_3_0_3/mapfiles/scripts/createlayers.php?MAP=%2Fvar%2Fwww%2Fmapserver%2Frouteguard%2Frelease_3_0_3%2Fmapfiles%2Frg_mapfile.map&LAYERS=tt_atm%3B75%24false%2Ctt_atm_labels%3B80%24false&fp=0&mdate=2015-05-07&mhour=06&date=2015-05-07&hour=06";
+    var bbox = this.getBoundingBox();
+    var zoom = this.map.getZoom();
+    var dim = this.getDim("#map_canvas");
+    var req = this.createRequestParams(bbox, zoom, dim);
+
+    this.image = url + req;
+    this.setMap(this.map);
   };
 
   /*
@@ -154,7 +309,7 @@
 
   /*    USAGE */
   $(function () {
-    var map = new Map({zoom: 4, el: "#map_canvas"});
+    var map = new Map({zoom: 3, el: "#map_canvas"});
     map.init();
     //for debugging
     window.map = map;

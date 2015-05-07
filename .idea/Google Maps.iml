@@ -7,5 +7,6 @@
     <orderEntry type="library" name="jQuery-2.0.0" level="application" />
     <orderEntry type="library" name="gulp-DefinitelyTyped" level="application" />
     <orderEntry type="library" name="googlemaps-DefinitelyTyped" level="application" />
+    <orderEntry type="library" name="Google Maps node_modules" level="project" />
   </component>
 </module>

@@ -68,7 +68,7 @@ $(function () {
         .done(function (coords) {
           createMap(coords);
           createMarker();
-          attachEvents()
+          //attachEvents()
         });
     }
 
