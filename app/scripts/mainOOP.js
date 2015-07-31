@@ -41,40 +41,28 @@
     this.markers.push(marker);
   };
   Map.prototype.attachEvents = function () {
-    this.$$on(this.map, 'center_changed', this.events.changeCenter.apply(this));
     this.$$on(this.map, 'click', this.events.createByClick.bind(this));
-    this.$$one(this.map, 'idle', this.events.mapLoaded.bind(this));
+    this.$$on(this.map, 'dragstart', this.events.removeLayer.bind(this));
+    this.$$on(this.map, 'zoom_changed', this.events.removeLayer.bind(this));
+    //this.$$on(this.map, 'dragend', this.events.addLayer.bind(this));
+    this.$$on(this.map, 'idle', this.events.addLayer.bind(this));
   };
   Map.prototype.events = {
     createByClick: function (location) {
       console.log(location)
       this.createMarker(location.latLng)
     },
-    changeCenter: function () {
-      var self = this;
-      return _.debounce(function(e) {
 
-        if(self.overlay){
-          console.log('remove')
-          self.overlay.setMap(null);
-          self.overlay = null;
-
-          console.log(self)
-
-          var bounds = self.map.getBounds()
-          var zoom = self.map.getZoom()
-          console.log("loaded", zoom, bounds.Ba);
-          //
-          self.overlay = new Overlay(bounds,self.map);
-          self.overlay.addLayer();
-        }
-      }, 500)
+    removeLayer: function () {
+      if(this.overlay){
+        console.log('remove')
+        this.overlay.setMap(null);
+        this.overlay = null;
+      }
     },
-    mapLoaded: function () {
+    addLayer: function () {
       var bounds = this.map.getBounds();
-      var zoom = this.map.getZoom();
-      console.log("loaded", zoom, bounds.Ba);
-      //
+
       this.overlay = new Overlay(bounds,this.map);
       this.overlay.addLayer();
 
@@ -89,6 +77,128 @@
         if(typeof cb === 'function') cb();
       }.bind(this));
   };
+
+
+
+  /*
+  *   OVERLAY Constructor
+  * */
+
+  function Overlay(bounds, map){
+    this.bounds = bounds;
+    this.map = map;
+    this.image = null;
+    this.div = null;
+
+    //this.setMap(map);
+  }
+
+  Overlay.prototype = new google.maps.OverlayView();
+  Overlay.prototype.onAdd = function () {
+    console.log('onAdd')
+    var div = document.createElement('div');
+    div.style.borderStyle = "none";
+    div.id = "ovlay"
+    div.style.borderStyle = "0px";
+    div.style.position = "absolute";
+
+    var img = document.createElement('img');
+    img.src = this.image;
+    img.style.width = "100%";
+    img.style.height = "100%";
+    //img.style.opacity = 0.7;
+
+    img.style.position = "absolute";
+    div.appendChild(img);
+
+    this.div = div;
+
+    var panes = this.getPanes();
+    panes.overlayLayer.appendChild(div);
+  };
+  Overlay.prototype.draw = function () {
+    console.log('draw')
+
+    var overlayProjection = this.getProjection();
+    var sw = overlayProjection.fromLatLngToDivPixel(this.bounds.getSouthWest());
+    var ne = overlayProjection.fromLatLngToDivPixel(this.bounds.getNorthEast());
+
+    var div = this.div;
+    div.style.left = sw.x + "px";
+    div.style.top = ne.y + "px";
+    div.style.width = ( ne.x - sw.x ) + "px";
+    div.style.height = ( sw.y - ne.y ) + "px";
+  };
+  Overlay.prototype.onRemove = function () {
+    console.log('removed')
+    if(this.div){
+      this.div.parentNode.removeChild(this.div);
+      this.div = null;
+    }
+  };
+  Overlay.prototype.createRequestParams = function(bbox, zoom, dim) {
+    var params = "";
+    params += "&REQUEST=GetMap";
+    params += "&SERVICE=WMS";
+    params += "&VERSION=1.1.1";
+    params += "&STYLES=default";
+    params += "&FORMAT=image/png";
+    params += "&BGCOLOR=0xffffff";
+    params += "&TRANSPARENT=TRUE";
+    params += "&SRS=EPSG:54004";
+    params += "&BBOX=" + bbox;
+    params += "&WIDTH=" + dim.width;
+    params += "&HEIGHT=" + dim.height;
+    params += "&gzoom=" + (zoom-1);
+    return params;
+  };
+  Overlay.prototype.exdd2MercMetersLat = function(latitude) {
+    //Google Maps V3 is in EPSG:3857, but we use EPSG:4326 maps
+    var WGS84_SEMI_MAJOR_AXIS = 6378137.0;
+    var WGS84_ECCENTRICITY = 0.0818191913108718138;
+
+    if (latitude == -90)
+      latitude = -89.999;
+    var rads = latitude * Math.PI / 180.0;
+
+    var returner = WGS84_SEMI_MAJOR_AXIS * Math.log(Math.tan((rads + Math.PI / 2) / 2) * Math.pow(((1 - WGS84_ECCENTRICITY * Math.sin(rads)) / (1 + WGS84_ECCENTRICITY * Math.sin(rads))), WGS84_ECCENTRICITY / 2));
+    return returner;
+  };
+  Overlay.prototype.exdd2MercMetersLng = function(longitude) {
+    var WGS84_SEMI_MAJOR_AXIS = 6378137.0;
+    return WGS84_SEMI_MAJOR_AXIS * (longitude * Math.PI / 180.0);
+  };
+  Overlay.prototype.getBoundingBox = function() {
+
+    var mapSW = this.bounds.getSouthWest();
+    var mapNE = this.bounds.getNorthEast();
+    var north = mapNE.lat();
+    var south = mapSW.lat();
+    var east = mapNE.lng();
+    var west = mapSW.lng();
+
+
+    //for 54004 projection
+    return Math.round(this.exdd2MercMetersLng(west)) + "," + Math.round(this.exdd2MercMetersLat(south)) + "," + Math.round(this.exdd2MercMetersLng(east)) + "," + Math.round(this.exdd2MercMetersLat(north));
+
+  };
+  Overlay.prototype.getDim = function(el) {
+    return {
+      "height": jQuery(el).height(),
+      "width": jQuery(el).width()
+    }
+  };
+  Overlay.prototype.addLayer = function () {
+    var url = "http://mapserver.routeguard.eu/release_3_0_3/mapfiles/scripts/createlayers.php?MAP=%2Fvar%2Fwww%2Fmapserver%2Frouteguard%2Frelease_3_0_3%2Fmapfiles%2Frg_mapfile.map&LAYERS=tt_atm%3B75%24false&fp=0&mdate=2015-05-10&mhour=12&date=2015-05-10&hour=12";
+    var bbox = this.getBoundingBox();
+    var zoom = this.map.getZoom();
+    var dim = this.getDim("#map_canvas");
+    var req = this.createRequestParams(bbox, zoom, dim);
+
+    this.image = url + req;
+    this.setMap(this.map);
+  };
+
 
   /*
    *    MARKER Constructor:
@@ -169,130 +279,6 @@
 
 
   /*
-  *   OVERLAY Constructor
-  * */
-
-  function Overlay(bounds, map){
-    this.bounds = bounds;
-    this.map = map;
-    this.image = null;
-    this.div = null;
-
-    //this.setMap(map);
-  }
-
-  Overlay.prototype = new google.maps.OverlayView();
-
-  Overlay.prototype.onAdd = function () {
-    console.log('onAdd')
-    var div = document.createElement('div');
-    div.style.borderStyle = "none";
-    div.id = "ovlay"
-    div.style.borderStyle = "0px";
-    div.style.position = "absolute";
-
-    var img = document.createElement('img');
-    img.src = this.image;
-    img.style.width = "100%";
-    img.style.height = "100%";
-    img.style.opacity = 0.5;
-
-    img.style.position = "absolute";
-    div.appendChild(img);
-
-    this.div = div;
-
-    var panes = this.getPanes();
-    panes.overlayLayer.appendChild(div);
-  };
-
-  Overlay.prototype.draw = function () {
-    console.log('draw')
-
-    var overlayProjection = this.getProjection();
-    var sw = overlayProjection.fromLatLngToDivPixel(this.bounds.getSouthWest());
-    var ne = overlayProjection.fromLatLngToDivPixel(this.bounds.getNorthEast());
-
-    var div = this.div;
-    div.style.left = sw.x + "px";
-    div.style.top = ne.y + "px";
-    div.style.width = ( ne.x - sw.x ) + "px";
-    div.style.height = ( sw.y - ne.y ) + "px";
-  };
-
-  Overlay.prototype.onRemove = function () {
-    console.log('removed')
-    if(this.div){
-      this.div.parentNode.removeChild(this.div);
-      this.div = null;
-    }
-  };
-
-  Overlay.prototype.createRequestParams = function(bbox, zoom, dim) {
-    var params = "";
-    params += "&REQUEST=GetMap";
-    params += "&SERVICE=WMS";
-    params += "&VERSION=1.1.1";
-    params += "&STYLES=default";
-    params += "&FORMAT=image/png";
-    params += "&BGCOLOR=0xffffff";
-    params += "&TRANSPARENT=TRUE";
-    params += "&SRS=EPSG:54004";
-    params += "&BBOX=" + bbox;
-    params += "&WIDTH=" + dim.width;
-    params += "&HEIGHT=" + dim.height;
-    params += "&gzoom=" + (zoom);
-    return params;
-  };
-  Overlay.prototype.exdd2MercMetersLat = function(latitude) {
-    //Google Maps V3 is in EPSG:3857, but we use EPSG:4326 maps
-    var WGS84_SEMI_MAJOR_AXIS = 6378137.0;
-    var WGS84_ECCENTRICITY = 0.0818191913108718138;
-
-    if (latitude == -90)
-      latitude = -89.999;
-    var rads = latitude * Math.PI / 180.0;
-
-    var returner = WGS84_SEMI_MAJOR_AXIS * Math.log(Math.tan((rads + Math.PI / 2) / 2) * Math.pow(((1 - WGS84_ECCENTRICITY * Math.sin(rads)) / (1 + WGS84_ECCENTRICITY * Math.sin(rads))), WGS84_ECCENTRICITY / 2));
-    return returner;
-  };
-  Overlay.prototype.exdd2MercMetersLng = function(longitude) {
-    var WGS84_SEMI_MAJOR_AXIS = 6378137.0;
-    return WGS84_SEMI_MAJOR_AXIS * (longitude * Math.PI / 180.0);
-  };
-  Overlay.prototype.getBoundingBox = function() {
-
-    var mapSW = this.bounds.getSouthWest();
-    var mapNE = this.bounds.getNorthEast();
-    var north = mapNE.lat();
-    var south = mapSW.lat();
-    var east = mapNE.lng();
-    var west = mapSW.lng();
-
-
-    //for 54004 projection
-    return Math.round(this.exdd2MercMetersLng(west)) + "," + Math.round(this.exdd2MercMetersLat(south)) + "," + Math.round(this.exdd2MercMetersLng(east)) + "," + Math.round(this.exdd2MercMetersLat(north));
-
-  };
-  Overlay.prototype.getDim = function(el) {
-    return {
-      "height": jQuery(el).height(),
-      "width": jQuery(el).width()
-    }
-  };
-
-  Overlay.prototype.addLayer = function () {
-    var url = "http://mapserver.routeguard.eu/release_3_0_3/mapfiles/scripts/createlayers.php?MAP=%2Fvar%2Fwww%2Fmapserver%2Frouteguard%2Frelease_3_0_3%2Fmapfiles%2Frg_mapfile.map&LAYERS=tt_atm%3B75%24false%2Ctt_atm_labels%3B80%24false&fp=0&mdate=2015-05-07&mhour=06&date=2015-05-07&hour=06";
-    var bbox = this.getBoundingBox();
-    var zoom = this.map.getZoom();
-    var dim = this.getDim("#map_canvas");
-    var req = this.createRequestParams(bbox, zoom, dim);
-
-    this.image = url + req;
-    this.setMap(this.map);
-  };
-
-  /*
   *     FORECAST API FACADE
   * */
   var forecastAPI = (function () {
@@ -307,12 +293,36 @@
     }
   })();
 
+
+  window.loadMaps = function (){
+    console.log('loaded');
+    var map = new Map({zoom: 3, el: "#map_canvas"});
+    map.init();
+  };
   /*    USAGE */
   $(function () {
     var map = new Map({zoom: 3, el: "#map_canvas"});
     map.init();
     //for debugging
     window.map = map;
+
+    /*&language=ja*/
+    function loadAPI() {
+      var script = document.createElement("script");
+      script.src = "http://www.google.com/jsapi?key=&language=ja&callback=loadMaps";
+      script.type = "text/javascript";
+      script.id = "map_script";
+      document.getElementsByTagName("head")[0].appendChild(script);
+    }
+
+    $("#changeLang").on('click', function () {
+      console.log()
+
+      $("#map_script").remove();
+      $("#map_canvas").empty();
+
+      loadAPI()
+    })
   });
 
 })();
